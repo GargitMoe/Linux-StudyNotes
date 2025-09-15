@@ -32,3 +32,13 @@
   cd ..                  # 返回上一级目录
   cd ../..               # 返回上上级目录
   打印后可能出现：/home/user/Documents
+## 4. 创建新文件
+
+- 用途：实际上，touch是更新时间戳，但如果不存在，会直接创建新文件
+- 常见用法：
+  ```bash
+  touch test.txt
+- 也可以是：
+  ```bash
+  vim test.txt
+
