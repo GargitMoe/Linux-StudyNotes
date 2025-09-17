@@ -69,6 +69,30 @@ optimizer = torch.optim.SGD(model.parameters(), lr=0.1, weight_decay=1e-4)
 
 ### 过拟合与欠拟合
 
+**欠拟合**
+· 模型太简单，不能捕捉数据规律，训练集表现就很差。
+
+· 训练误差高，测试误差也高。
+
+原因可能是：
+
+模型容量不足（比如用线性模型拟合非线性数据）。
+
+特征不够（没包含关键特征）。
+
+**过拟合**
+· 模型太复杂，在训练集上表现很好，但泛化到测试集很差。
+· 训练误差低，测试误差高。
+
+可以使用：
+· 增加数据量（收集更多样本 / 数据增强）。
+
+· 加强正则化（L1/L2、Dropout、BN）。
+
+· 提前停止训练 (Early Stopping)。
+
+· 减小模型复杂度。
+
 ### 损失函数
 
 ### 激活函数
@@ -78,8 +102,10 @@ optimizer = torch.optim.SGD(model.parameters(), lr=0.1, weight_decay=1e-4)
 $\sigma(x) = \frac{1}{1+e^{-x}}$
 
 **优点**
+
 · 好像就只有输出范围是 0 到 1 了
 **缺点**
+
 · 计算量大（有幂）
 
 · Sigmoid 的导数范围是 0 到 0.25，x 过大和过小都容易让导数接近于 0
@@ -90,10 +116,12 @@ $\sigma(x) = \frac{1}{1+e^{-x}}$
 
 $\tanh(x) = \frac{e^x - e^{-x}}{e^x + e^{-x}}$
 **优点**
+
 · 解决了均值不是 0 的问题
 
 · 靠近 0 点时导数值比 sigmoid 大，收敛快一些
 **缺点**
+
 · 计算量还是大
 
 · 梯度消失问题依旧存在
@@ -102,12 +130,14 @@ $\tanh(x) = \frac{e^x - e^{-x}}{e^x + e^{-x}}$
 
 $\text{ReLU}(x) = \max(0, x)$
 **优点**
+
 · 计算速度很快，非线性函数
 
 · 激活输出为正时，导数为 1，缓解了梯度消失
 
 · 为负时，使得神经元变得稀疏，感觉有点像正则化，防止了部分噪声引入。
 **缺点**
+
 · ReLU 也不是 zero-centered 的
 
 · 使得神经元部分死亡，让部分神经元可能无法更新
@@ -116,8 +146,10 @@ $\text{ReLU}(x) = \max(0, x)$
 
 $\text{LeakyReLU}(x) = \begin{cases}x, & x \geq 0 \\ \alpha x, & x < 0\end{cases}$
 **优点**
+
 · 在 ReLU 基础上防止了神经元死亡问题
 **缺点**
+
 · 网络稀疏性更差
 
 · 引入了额外的超参数
@@ -127,6 +159,7 @@ $\text{LeakyReLU}(x) = \begin{cases}x, & x \geq 0 \\ \alpha x, & x < 0\end{cases
 #### GELU（公式有点复杂）
 
 **优点**
+
 · 兼具稀疏性和概率性
 
 · Trans/BERT 中经常使用
@@ -151,6 +184,9 @@ $$
 \theta_{t+1} = \theta_t - \eta \nabla_\theta J(\theta_t; x^{(i)}, y^{(i)})
 $$
 
+· 最简单最经典
+· 收敛慢容易震荡
+
 #### 2. SGD with Momentum
 
 $$
@@ -161,7 +197,12 @@ $$
 \theta_{t+1} = \theta_t - \eta v_t
 $$
 
+· 更新方向是历史梯度的指数加权平均，而不是单点的梯度。
+· 有助于提高收敛速度
+
 #### 3.Adam
+
+AdaGrad：对每个参数都单独设置学习率，并且加入一个历史梯度
 
 $$
 m_t = \beta_1 m_{t-1} + (1-\beta_1)\nabla_\theta J(\theta_t)
@@ -179,25 +220,100 @@ $$
 \theta_{t+1} = \theta_t - \frac{\eta}{\sqrt{\hat{v}_t}+\epsilon} \hat{m}_t
 $$
 
-#### 4.AdamW
-
 $$
 \theta_{t+1} = \theta_t - \eta \Bigg( \frac{\hat{m}_t}{\sqrt{\hat{v}_t}+\epsilon} + \lambda \theta_t \Bigg)
 $$
 
 ### 数据增强
 
+数据增强流水线，torchvision 等等（我的自制视频里面有讲到）
+
 ### Transformer Attention 和 ViT
 
 ### ResNet 和瓶颈块结构
 
+什么都不学（参数趋近于 0）”比“精确学出恒等映射”更自然。
+解决深层网络的退化问题和梯度消失爆炸问题。
+
+直接把上面一层跳跃连接到这一层的输出，如果自己没学到什么，至少上一层的 x 还在，不会自己“搞砸”
+
+#### 手搓瓶颈块？
+
+```bash
+import torch
+import torch.nn as nn
+
+class Bottleneck(nn.Module):
+    expansion = 4  # 输出通道是中间通道的 4 倍
+
+    def __init__(self, in_channels, out_channels, stride=1, downsample=None):
+        super(Bottleneck, self).__init__()
+
+        # 1x1 卷积 降维
+        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(out_channels)
+
+        # 3x3 卷积 提取特征
+        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=stride,
+                               padding=1, bias=False)
+        self.bn2 = nn.BatchNorm2d(out_channels)
+
+        # 1x1 卷积 升维
+        self.conv3 = nn.Conv2d(out_channels, out_channels * self.expansion, kernel_size=1, bias=False)
+        self.bn3 = nn.BatchNorm2d(out_channels * self.expansion)
+
+        # 残差支路（可能需要下采样保证维度一致）
+        self.downsample = downsample
+        self.relu = nn.ReLU(inplace=True)
+
+    def forward(self, x):
+        identity = x
+
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+        out = self.relu(out)
+
+        out = self.conv3(out)
+        out = self.bn3(out)
+
+        # shortcut 分支
+        if self.downsample is not None:
+            identity = self.downsample(x)
+
+        out += identity
+        out = self.relu(out)
+
+        return out
+```
+
+需要注意捷径链接里的 downsample，如果通 道/高宽不一致，需要对应。
+通常是以下函数来改变捷径链接的通道：
+
+```bash
+nn.Sequential(
+    nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=stride, bias=False),
+    nn.BatchNorm2d(out_channels)
+)
+
+```
+
+## 池化层有几种？
+
 ## 目标检测与计算机视觉
+
+### 你能手搓 LeNet 吗？
 
 ### 各个边缘检测算子的区别？
 
 ### 单阶段检测和双阶段
 
 ### 各个正确率指标
+
+### 卡尔曼滤波
 
 ### YOLOv7 和 YOLOv5 的区别，为什么你使用了 YOLOv7？
 
@@ -206,3 +322,13 @@ $$
 ### 激光雷达原理
 
 激光雷达发射高密度的激光束，光束沿直行传播打到物体的表面，然后以相同的方向反射回去（忽略少量光线发生衍射现象），反射回去的光线由光电探测器（光敏传感器）检测收集，结合激光束往返传播的距离与方向信息就可以生成物体的 3D 几何形状。实际在使用过程中，激光发射器置于连续旋转的底座上，从而使得发射的激光束能以不同方向到达物体表面（前、后、左、右）。
+
+### PointRCNN 架构理解
+
+### ICP 配准
+
+### RANSAC
+
+### BEV
+
+### KPConv
