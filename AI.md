@@ -329,6 +329,9 @@ nn.Sequential(
 
 ### RANSAC
 
+### PointNet
+![PN里共享权重的MLP](SharedMLP.png)
+
 ### BEV
 
 ### KPConv
