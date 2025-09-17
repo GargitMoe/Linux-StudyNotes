@@ -16,6 +16,14 @@ N 把输入“拉回”到一个合适的范围（大约均值 0，方差 1）�
 
 > 顺序：输入 → 卷积/全连接 → BN → ReLU → 下一层 （要先归一化再输入 ReLU）
 
+#### BatchNorm
+
+将当前批次所有数据的具有相同通道索引的特征图划分为一组，每组单独归一化，这样组集合就是（NxC1xHxW）一组。
+
+#### LayerNorm
+
+将当前批次单个数据的所有通道的特征图划分为一组，每组单独归一化，这样组集合就是（N1xCxHxW）一组。
+
 ### CNN 的典型输出：
 
 （NxCxHxW）：
@@ -65,17 +73,107 @@ optimizer = torch.optim.SGD(model.parameters(), lr=0.1, weight_decay=1e-4)
 
 ### 激活函数
 
+#### Sigmoid
+
 $\sigma(x) = \frac{1}{1+e^{-x}}$
 
+**优点**
+· 好像就只有输出范围是 0 到 1 了
+**缺点**
+· 计算量大（有幂）
+· Sigmoid 的导数范围是 0 到 0.25，x 过大和过小都容易让导数接近于 0
+· 输出不是 0 均值，导致网络加深会改变数据的分布
+
+#### tanh
+
 $\tanh(x) = \frac{e^x - e^{-x}}{e^x + e^{-x}}$
+**优点**
+· 解决了均值不是 0 的问题
+· 靠近 0 点时导数值比 sigmoid 大，收敛快一些
+**缺点**
+· 计算量还是大
+· 梯度消失问题依旧存在
+
+#### ReLU（我的个人项目里是这样的）
 
 $\text{ReLU}(x) = \max(0, x)$
+**优点**
+· 计算速度很快，非线性函数
+· 激活输出为正时，导数为 1，缓解了梯度消失
+· 为负时，使得神经元变得稀疏，感觉有点像正则化，防止了部分噪声引入。
+**缺点**
+· ReLU 也不是 zero-centered 的
+· 使得神经元部分死亡，让部分神经元可能无法更新
+
+#### Leaky ReLU（CNN 里常用）
 
 $\text{LeakyReLU}(x) = \begin{cases}x, & x \geq 0 \\ \alpha x, & x < 0\end{cases}$
+**优点**
+· 在 ReLU 基础上防止了神经元死亡问题
+**缺点**
+· 网络稀疏性更差
+· 引入了额外的超参数
+· 相对来讲更贴近 0 均值
+
+#### GELU（公式有点复杂）
+
+**优点**
+· 兼具稀疏性和概率性
+· Trans/BERT 中经常使用
+
+#### Softmax（勉强也算激活函数吧！实在不知道分到哪）
+
+可以把 logit 映射到和为 1 的一个概率上，所以很适合多分类问题。
+
+**不过现代 DL 主要还是追求防止梯度消失和爆炸问题，0 均值只是让收敛速度更慢一些**
 
 ### 优化器
 
-### 各个正确率指标
+**梯度理解**
+神经网络的损失函数是一个多元函数，相当于网络在一个很高维度的空间寻找梯度。
+一元函数，要么正要么负方向。但在高位空间就是一个找一个方向高维向量了。
+
+在更新时，每个参数都拥有自己的偏导数分量，一起构成某个“最好的梯度向量”，因此更新一次梯度会牵扯到几乎所有参数。（类似于空间中多个向量合成为一个向量，某个更新方向实际上也是有多个参数组成的，有些参数梯度大，有些参数梯度小）
+
+#### 1.SGD
+
+$$
+\theta_{t+1} = \theta_t - \eta \nabla_\theta J(\theta_t; x^{(i)}, y^{(i)})
+$$
+
+#### 2. SGD with Momentum
+
+$$
+v_t = \beta v_{t-1} + (1-\beta)\nabla_\theta J(\theta_t)
+$$
+
+$$
+\theta_{t+1} = \theta_t - \eta v_t
+$$
+
+#### 3.Adam
+
+$$
+m_t = \beta_1 m_{t-1} + (1-\beta_1)\nabla_\theta J(\theta_t)
+$$
+
+$$
+v_t = \beta_2 v_{t-1} + (1-\beta_2)(\nabla_\theta J(\theta_t))^2
+$$
+
+$$
+\hat{m}_t = \frac{m_t}{1-\beta_1^t}, \quad \hat{v}_t = \frac{v_t}{1-\beta_2^t}
+$$
+
+$$
+\theta_{t+1} = \theta_t - \frac{\eta}{\sqrt{\hat{v}_t}+\epsilon} \hat{m}_t
+$$
+
+#### 4.AdamW
+
+$$
+\theta_{t+1} = \theta_t - \eta \Bigg( \frac{\hat{m}_t}{\sqrt{\hat{v}_t}+\epsilon} + \lambda \theta_t \Bigg)
+$$
 
 ### 数据增强
 
@@ -85,7 +183,11 @@ $\text{LeakyReLU}(x) = \begin{cases}x, & x \geq 0 \\ \alpha x, & x < 0\end{cases
 
 ## 目标检测与计算机视觉
 
+### 各个边缘检测算子的区别？
+
 ### 单阶段检测和双阶段
+
+### 各个正确率指标
 
 ### YOLOv7 和 YOLOv5 的区别，为什么你使用了 YOLOv7？
 
