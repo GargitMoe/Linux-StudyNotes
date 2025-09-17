@@ -1,5 +1,7 @@
 ## AI 基础篇
 
+### 监督/全监督/半监督/弱监督
+
 ### 卷积的作用？
 
 1. 局部连接。比起全连接，局部连接会大大减少网络的参数。
@@ -28,4 +30,67 @@ batch size x Channel x Hight x Width
 optimizer = torch.optim.SGD(model.parameters(), lr=0.1, weight_decay=1e-4)
 ```
 
-这里的 weight decay 实际上就是正则化，作用是防止特别依赖某个权重，惩罚较大的权重
+这里的 weight decay 实际上就是正则化，作用是防止特别依赖某个权重，惩罚较大的权重。
+
+#### Dropout：
+
+· 训练时随机把一部分神经元“丢掉”（置 0），以概率 𝑝 保留。
+
+· 推理时不丢弃，而是用缩放的权重。
+
+· 本质：引入随机性，让模型不能过度依赖某些神经元 → 起到正则化效果。
+可以在全连接层中使用
+
+```bash
+        # 全连接层
+        self.flatten = nn.Flatten()
+        self.fc1 = fc_with_initialize(1024 * 4 * 4, 2048)
+        self.bn_fc1 = nn.BatchNorm1d(num_features=2048)
+        self.dropout_fc1 = nn.Dropout(0.5)
+        self.fc2 = fc_with_initialize(2048, 1024)
+        self.bn_fc2 = nn.BatchNorm1d(num_features=1024)
+        self.dropout_fc2 = nn.Dropout(0.6)
+        self.fc3 = fc_with_initialize(1024, self.num_class)
+```
+
+· 没有 Dropout 时，某些神经元可能“绑在一起”工作，过分依赖彼此。通过 Dropout 随机屏蔽掉一些神经元，迫使其他神经元也要学到有用的特征。
+
+· 在 Dropout 每一轮训练过程中随机丢失神经元的操作相当于多个模型进行取平均，因此用于预测时具有 vote 的效果。
+
+> 一个神经元同时包含了输入，权重，偏置和其激活函数，所谓神经元激活不激活是由激活函数决定的
+
+### 过拟合与欠拟合
+
+### 损失函数
+
+### 激活函数
+
+$\sigma(x) = \frac{1}{1+e^{-x}}$
+
+$\tanh(x) = \frac{e^x - e^{-x}}{e^x + e^{-x}}$
+
+$\text{ReLU}(x) = \max(0, x)$
+
+$\text{LeakyReLU}(x) = \begin{cases}x, & x \geq 0 \\ \alpha x, & x < 0\end{cases}$
+
+### 优化器
+
+### 各个正确率指标
+
+### 数据增强
+
+### Transformer Attention 和 ViT
+
+### ResNet 和瓶颈块结构
+
+## 目标检测与计算机视觉
+
+### 单阶段检测和双阶段
+
+### YOLOv7 和 YOLOv5 的区别，为什么你使用了 YOLOv7？
+
+## 3D 感知基础
+
+### 激光雷达原理
+
+激光雷达发射高密度的激光束，光束沿直行传播打到物体的表面，然后以相同的方向反射回去（忽略少量光线发生衍射现象），反射回去的光线由光电探测器（光敏传感器）检测收集，结合激光束往返传播的距离与方向信息就可以生成物体的 3D 几何形状。实际在使用过程中，激光发射器置于连续旋转的底座上，从而使得发射的激光束能以不同方向到达物体表面（前、后、左、右）。
