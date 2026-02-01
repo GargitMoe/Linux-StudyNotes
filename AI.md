@@ -234,8 +234,67 @@ $$
 self.weight = Parameter(torch.empty((1, 1, feat_views), **factory_kwargs))
 ```
 
-### Transformer Attention 和 ViT
+## Transformer Attention 和 ViT
 
+注意，因为不需要“生成”，所以传统的vit仅仅是一个encoder，不需要根本的transformer架构里的decoder。
+把最重要的说在最前面，ViT原论文中最核心的结论是，当拥有足够多的数据进行预训练的时候，ViT的表现就会超过CNN，突破transformer缺少归纳偏置的限制，可以在下游任务中获得较好的迁移效果。
+
+因为：CNN 在结构里“内置了强先验（inductive bias）”，而 ViT 把这些先验几乎全部交给数据去学。
+CNN 在结构上强行假设了很多世界规律：
+局部性（locality） 相邻像素更相关
+平移等变性（translation equivariance） 同一个纹理不同位置，输出不变，只是位置改变了
+层级组合（hierarchy） 边缘 → 纹理 → 部件 → 目标
+这些不是学出来的，是写死在卷积算子里的。
+反观，attention 的假设是：
+“任意 token 都可能和任意 token 有关系”，导致表达能力更强，但问题在于这需要极大数据量才可以支撑起来。
+
+ViT 中流动的张量核心形态是：
+Batch×Token×Feature
+
+Input image:        (B, 3, 224, 224)
+Patch embedding →   (B, 196, 768)（196个patch，每个patch有16x16x3的像素，对于每个patch，额外进行一次768→768的linear）
+CLS token →       (B, 197, 768)（这个cls token类似于一种全局表示，但是transformer原论文里没有提到，当要产生情感提取/分类时就要使用，这个其实是bert里面提到的，vit为了一定程度上对齐bert结构，所以也引入了cls token）
+
+我们推一遍vit里的流程：我们直接使用大矩阵来一次性代替Q，K，V的所有变换，我们只需要在其中reshape出各个部分就行：（以双头为例子）  然后每个Q和K的转置相乘，得到197x197的注意力权重矩阵（当然这里要使用注意力头的维度进行归一化之后再softmax，防止点积数值溢出），197x197的权重矩阵乘上197x384的单头v，最后把两个头的197x384结果concat在一起，重新得到197x768的原始维度。（因此维度在这里是始终固定的）
+
+在这里，197x768的多头注意力输出会sum上仅仅接受过LN的z（初始embedding输入）的残差链接。然后继续norm，之后还会有一次768→768的线性变换。至此，一个vit的encoder block结束。
+
+
+CNN 中流动的张量核心形态是：
+Batch×Channel×Height×Width
+
+例如resnet：
+
+(B, 3, H, W)
+↓ conv
+(B, 64, H/2, W/2)
+↓ conv
+(B, 128, H/4, W/4)
+
+### 为什么ViT里用Gelu，而不是cnn里的relu？
+ViT 没有声称 GELU 是“为视觉特别设计的”，而是 完全沿用 NLP Transformer（BERT）的 MLP 设计，因此我们得回退到transformer本身的设计哲学上。
+ReLU（硬门控）会把负半轴全部截断
+
+GELU（软门控，概率意义），包含一个高斯函数，保留一个神经元，不是看它是不是 >0，
+而是看它在噪声下为正的概率。
+
+同时，我们要注意到，transformer里的LN（layerNorm）不适合relu这种引入稀疏性的函数，把特征标准化到 均值 0，导致很多维度会在 0 附近波动
+如果你用 ReLU：约 50% 维度被直接砍成 0。
+
+### 这里还需要继续复习batchnorm和layernorm的区别
+Batchnorm的设计，会导致训练时小batch的扰动更大。
+假设我图片的中间维度是：B x C x H x W, batchnorm会对每一个channel：在B x H x W作为分母的情况下归一化，也就是我在“跨样本（图片），跨空间”维度上归一化。
+
+Layernorm如果在transformer里，则是：在特征维度上归一化，即对于一个197x768的输入（token x dimension），在每一个token的768个特征维度上归一化，使其均值为0，方差为1。
+
+如果硬在cnn里做Layernorm（实际上cnn的结构不适合如此），那也就是在“单样本”上，使用C x H x W做归一化，这会带来非常奇怪的结果：一个像素点的值会被其他通道影响，我的边缘检测的响应有可能会被颜色响应，噪声响应等其他通道的状态抹平，这实际上让通道的检测丢失了独立性。
+
+### 回到问题，为什么transformer使用layernorm？
+因为layernorm依旧保证了transformer的设计哲学，各个token是独立的，每个token是一个独立语义单元，token之间的全局关系应该通过注意力模块学习，而不是直接使用norm来强行统一。
+假设我们使用batchnorm：唯一一种可能性是：对每一个 feature 维 d，在 batch × token 维度上做 norm。即分母为B x token，即在normalize中全局混合了其他token里的语义结果，而这是奇怪的。
+
+那么，凭什么cnn里就可以使用batchnorm？这不也是混合了吗？
+Cnn的语义本质来自于“通道”，我们初始拥有3个通道，分别代表RGB的语义信息，从底层来看，我们假设cnn在第一层之后提取出32个通道C，其中某个通道c的卷积核可能代表“边缘”语义，这个通道对于batch内的所有样本表达的语义都相同，即都是batch样本内的“边缘”，我们并没有把“不同语义”混合在一起，每一次的归一化都只对某个单独的语义通道做，我们并不会把跨通道信息“噪声检测” “颜色检测”等抽象通道融合在一起，因此这是自洽的。  
 ### ResNet 和瓶颈块结构
 
 什么都不学（参数趋近于 0）”比“精确学出恒等映射”更自然。
